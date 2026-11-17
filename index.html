@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inside the Network — A Complete Internal Penetration Test</title>
+<meta name="description" content="A cinematic 3D, anonymized walkthrough of a complete authorized internal network penetration test.">
+<style>
+:root{
+  --bg:#03050c; --ink:#eaf2ff; --mut:#93a6c9; --faint:#58698b;
+  --cy:#39e3ff; --cy2:#00b0ff; --blue:#3b6bff;
+  --hi:#ff4d5e; --me:#ffb020; --ok:#2ee6a6;
+  --line:rgba(120,160,230,.14); --card:rgba(12,20,40,.62);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html.lock,body.lock{overflow:hidden;height:100%}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,sans-serif;overflow-x:hidden;line-height:1.55;-webkit-font-smoothing:antialiased}
+.mono{font-family:'DejaVu Sans Mono',ui-monospace,monospace}
+h1,h2,h3{font-family:'Inter',sans-serif;font-weight:800;letter-spacing:-.02em;line-height:1.04}
+
+/* ===== 3D scene canvas (persistent background) ===== */
+#scene{position:fixed;inset:0;z-index:0}
+.atmos{position:fixed;inset:0;z-index:1;pointer-events:none}
+.atmos .glow{position:absolute;left:50%;top:-30vh;transform:translateX(-50%);width:120vw;height:80vh;
+  background:radial-gradient(closest-side,rgba(59,107,255,.2),transparent 70%);filter:blur(12px)}
+.atmos .vig{position:absolute;inset:0;box-shadow:inset 0 0 240px 70px rgba(2,4,10,.92)}
+.atmos .scan{position:absolute;inset:0;opacity:.04;background:repeating-linear-gradient(0deg,#fff 0 1px,transparent 1px 3px)}
+
+/* ===== CINEMATIC INTRO ===== */
+#intro{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;
+  transition:opacity 1.1s ease, visibility 1.1s}
+#intro.done{opacity:0;visibility:hidden}
+#intro .veil{position:absolute;inset:0;background:radial-gradient(130% 100% at 50% 50%,rgba(3,6,14,.2),rgba(2,4,10,.82) 70%);transition:opacity 1s}
+.ic{position:relative;text-align:center;z-index:2;padding:0 6vw}
+.ic .pre{font-family:'DejaVu Sans Mono';font-size:clamp(10px,1.3vw,13px);letter-spacing:.6em;color:var(--cy);
+  text-transform:uppercase;opacity:0;transform:translateY(10px);transition:all .9s ease .2s}
+.ic .pre.show{opacity:.9;transform:none}
+.ititle{font-size:clamp(44px,10.5vw,150px);line-height:.9;margin-top:14px;
+  filter:blur(16px);opacity:0;letter-spacing:.35em;transform:scale(1.08);
+  background:linear-gradient(180deg,#fff 0%,#c4d8ff 58%,#6f8dc8 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.ititle .cy{background:linear-gradient(180deg,var(--cy),var(--cy2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.ititle.show{filter:blur(0);opacity:1;letter-spacing:-.02em;transform:none;transition:filter 1.1s cubic-bezier(.2,.8,.2,1),opacity 1.1s,letter-spacing 1.1s cubic-bezier(.2,.8,.2,1),transform 1.1s cubic-bezier(.2,.8,.2,1)}
+.ititle.glitch::before,.ititle.glitch::after{content:attr(data-t);position:absolute;left:0;right:0;top:0;-webkit-background-clip:text;background-clip:text}
+.ititle.glitch::before{color:#ff2d6b;-webkit-text-fill-color:#ff2d6b;animation:g1 .5s steps(2) 1;transform:translate(3px,0)}
+.ititle.glitch::after{color:#2de0ff;-webkit-text-fill-color:#2de0ff;animation:g2 .5s steps(2) 1;transform:translate(-3px,0)}
+@keyframes g1{0%,100%{opacity:0;clip-path:inset(0 0 100% 0)}25%{opacity:.8;clip-path:inset(0 0 55% 0)}55%{clip-path:inset(45% 0 25% 0)}}
+@keyframes g2{0%,100%{opacity:0;clip-path:inset(100% 0 0 0)}30%{opacity:.7;clip-path:inset(55% 0 12% 0)}60%{clip-path:inset(12% 0 60% 0)}}
+.ic .isub{margin-top:20px;font-size:clamp(14px,1.9vw,19px);color:var(--mut);opacity:0;transform:translateY(10px);transition:all .9s ease}
+.ic .isub.show{opacity:1;transform:none}
+.status{position:absolute;left:5vw;bottom:5vh;z-index:2;font-family:'DejaVu Sans Mono';font-size:clamp(10px,1.3vw,13px);
+  line-height:1.9;color:#8fe8c7;text-shadow:0 0 10px rgba(46,230,166,.35);white-space:pre}
+.status .ok{color:#39e3ff}.status .warn{color:#ffb020}.status .dim{color:#5f7a70}
+.intro-hint{position:absolute;bottom:5vh;right:5vw;z-index:2;font-family:'DejaVu Sans Mono';font-size:11px;letter-spacing:.3em;
+  color:var(--faint);text-transform:uppercase;opacity:0;transition:opacity .8s}
+.intro-hint.show{opacity:1}
+.skip{position:absolute;top:4vh;right:5vw;z-index:3;font-family:'DejaVu Sans Mono';font-size:11px;letter-spacing:.2em;
+  color:var(--faint);cursor:pointer;border:1px solid var(--line);padding:7px 14px;border-radius:999px;transition:.25s}
+.skip:hover{color:var(--ink);border-color:rgba(57,227,255,.5)}
+
+/* ===== nav + playbar + progress ===== */
+.nav{position:fixed;right:26px;top:50%;transform:translateY(-50%);z-index:30;display:flex;flex-direction:column;gap:14px}
+.nav a{width:11px;height:11px;border-radius:50%;border:1.5px solid rgba(120,160,230,.4);position:relative;transition:.3s}
+.nav a.active{background:var(--cy);border-color:var(--cy);box-shadow:0 0 12px var(--cy)}
+.nav a span{position:absolute;right:20px;top:50%;transform:translateY(-50%);white-space:nowrap;font-family:'DejaVu Sans Mono';font-size:10px;letter-spacing:.14em;color:var(--mut);opacity:0;transition:.3s;text-transform:uppercase}
+.nav a:hover span{opacity:1}
+@media(max-width:820px){.nav{display:none}}
+.playbar{position:fixed;left:26px;bottom:24px;z-index:30;display:flex;gap:10px}
+.pbtn{font-family:'DejaVu Sans Mono';font-size:11px;letter-spacing:.14em;color:var(--mut);border:1px solid var(--line);border-radius:999px;padding:9px 16px;background:rgba(10,16,32,.6);cursor:pointer;backdrop-filter:blur(6px);transition:.25s}
+.pbtn:hover{color:var(--ink);border-color:rgba(57,227,255,.5)}
+.pbtn.on{color:#02060f;background:linear-gradient(90deg,var(--cy),var(--cy2));border:none}
+@media(max-width:820px){.playbar{display:none}}
+.prog{position:fixed;top:0;left:0;height:3px;width:0;z-index:50;background:linear-gradient(90deg,var(--cy),var(--blue));box-shadow:0 0 12px var(--cy)}
+
+/* ===== layout ===== */
+.wrap{position:relative;z-index:3}
+section{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:10vh 6vw;position:relative}
+.inner{max-width:1000px;width:100%}
+.kick{font-family:'DejaVu Sans Mono';font-size:clamp(11px,1.2vw,13px);letter-spacing:.42em;text-transform:uppercase;color:var(--cy);margin-bottom:18px;display:flex;align-items:center;gap:12px}
+.kick::before{content:"";width:34px;height:1px;background:linear-gradient(90deg,var(--cy),transparent)}
+.actnum{position:absolute;top:7vh;right:5vw;font-family:'DejaVu Sans Mono';font-size:clamp(60px,13vw,200px);font-weight:800;color:transparent;-webkit-text-stroke:1px rgba(120,160,230,.1);z-index:-1;letter-spacing:-.04em;line-height:1}
+.panel{background:linear-gradient(180deg,rgba(6,10,22,.72),rgba(5,8,18,.5));border:1px solid var(--line);border-radius:22px;padding:clamp(24px,4vw,46px);backdrop-filter:blur(3px)}
+
+/* hero */
+.hero{text-align:center;flex-direction:column;gap:22px}
+.badge{display:inline-flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:999px;padding:7px 16px;font-family:'DejaVu Sans Mono';font-size:12px;color:var(--mut);background:rgba(10,16,32,.5);backdrop-filter:blur(6px)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 12px var(--ok);animation:pulse 1.6s infinite}
+@keyframes pulse{50%{opacity:.35}}
+.hero h1{font-size:clamp(46px,10vw,150px);line-height:.88;background:linear-gradient(180deg,#fff 0%,#c4d8ff 58%,#6f8dc8 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero h1 .cy{background:linear-gradient(180deg,var(--cy),var(--cy2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero .sub{color:var(--mut);font-size:clamp(15px,2vw,21px);max-width:720px;margin:0 auto}
+.heroline{width:72px;height:3px;border-radius:3px;background:linear-gradient(90deg,var(--cy),var(--blue));margin:6px auto 0;box-shadow:0 0 22px var(--cy)}
+.scrollcue{position:absolute;bottom:4vh;left:50%;transform:translateX(-50%);color:var(--faint);font-family:'DejaVu Sans Mono';font-size:11px;letter-spacing:.3em;text-transform:uppercase;display:flex;flex-direction:column;align-items:center;gap:8px}
+.mouse{width:22px;height:34px;border:1.5px solid var(--faint);border-radius:12px;position:relative}
+.mouse::after{content:"";position:absolute;left:50%;top:7px;transform:translateX(-50%);width:3px;height:7px;border-radius:2px;background:var(--cy);animation:wheel 1.6s infinite}
+@keyframes wheel{0%{opacity:0;top:7px}30%{opacity:1}100%{opacity:0;top:17px}}
+
+/* reveal */
+.rev{opacity:0;transform:translateY(38px);transition:opacity .9s cubic-bezier(.2,.7,.2,1),transform .9s cubic-bezier(.2,.7,.2,1)}
+.rev.in{opacity:1;transform:none}
+.d1{transition-delay:.08s}.d2{transition-delay:.17s}.d3{transition-delay:.26s}.d4{transition-delay:.35s}.d5{transition-delay:.44s}
+h2.big{font-size:clamp(30px,5.6vw,72px);margin-bottom:18px}
+.lead{color:var(--mut);font-size:clamp(16px,2.1vw,22px);max-width:740px}
+.hl{color:var(--ink);font-weight:700}.cyt{color:var(--cy)}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:40px}
+.stat{border:1px solid var(--line);border-radius:16px;padding:20px 18px;background:var(--card);backdrop-filter:blur(8px);position:relative;overflow:hidden}
+.stat::before{content:"";position:absolute;inset:0;background:linear-gradient(135deg,rgba(57,227,255,.08),transparent 60%)}
+.stat .n{font-family:'DejaVu Sans Mono';font-weight:800;font-size:clamp(28px,4.4vw,48px);background:linear-gradient(180deg,#fff,var(--cy));-webkit-background-clip:text;background-clip:text;color:transparent}
+.stat .l{color:var(--mut);font-size:12px;letter-spacing:.06em;text-transform:uppercase;margin-top:6px}
+
+/* findings */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:18px;margin-top:34px}
+.fcard{border:1px solid var(--line);border-radius:18px;padding:22px;background:var(--card);backdrop-filter:blur(8px);position:relative;overflow:hidden;transition:transform .5s cubic-bezier(.2,.7,.2,1),box-shadow .5s,border-color .5s}
+.fcard:hover{transform:translateY(-8px) rotateX(5deg) rotateY(-4deg);box-shadow:0 26px 60px rgba(0,0,0,.55);border-color:rgba(57,227,255,.3)}
+.fcard .ic2{font-size:26px;filter:drop-shadow(0 0 10px rgba(57,227,255,.4))}
+.fcard .fid{font-family:'DejaVu Sans Mono';font-size:11px;color:var(--faint);margin-top:12px;letter-spacing:.1em}
+.fcard h3{font-size:19px;margin-top:4px}.fcard p{color:var(--mut);font-size:13.5px;margin-top:8px}
+.verified{margin-top:12px;font-family:'DejaVu Sans Mono';font-size:10px;letter-spacing:.1em;color:var(--ok)}
+.sev{display:inline-block;margin-top:12px;font-family:'DejaVu Sans Mono';font-size:10px;font-weight:700;letter-spacing:.12em;padding:4px 11px;border-radius:999px;text-transform:uppercase}
+.sev.hi{background:rgba(255,77,94,.14);color:#ff8a96;border:1px solid rgba(255,77,94,.4)}
+.sev.me{background:rgba(255,176,32,.14);color:#ffcf7a;border:1px solid rgba(255,176,32,.4)}
+.bar{position:absolute;left:0;top:0;bottom:0;width:4px}.bar.hi{background:var(--hi)}.bar.me{background:var(--me)}
+
+/* coverage */
+.cov{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:30px}
+.cov .it{display:flex;align-items:center;gap:14px;border:1px solid var(--line);border-radius:12px;padding:13px 18px;background:rgba(10,20,18,.4)}
+.cov .chk{width:24px;height:24px;border-radius:7px;border:2px solid var(--ok);display:flex;align-items:center;justify-content:center;color:var(--ok);font-weight:800;font-size:13px;flex:0 0 auto;box-shadow:0 0 12px rgba(46,230,166,.25)}
+.cov .t{font-size:14.5px;color:var(--ink)}
+.covnote{margin-top:26px;display:flex;gap:30px;flex-wrap:wrap}
+.covnote .b .n{font-family:'DejaVu Sans Mono';font-size:clamp(30px,4vw,46px);font-weight:800;background:linear-gradient(180deg,#fff,var(--cy));-webkit-background-clip:text;background-clip:text;color:transparent}
+.covnote .b .l{font-size:12px;color:var(--mut);letter-spacing:.08em;text-transform:uppercase;margin-top:2px}
+.quote{margin-top:36px;border-left:3px solid var(--cy);padding:6px 0 6px 24px;font-size:clamp(19px,3vw,30px);font-weight:700;line-height:1.3;max-width:820px}
+.quote .cyt{color:var(--cy)}
+
+/* remediation */
+.fixes{margin-top:30px;display:grid;gap:12px;max-width:780px}
+.fix{display:flex;align-items:center;gap:16px;border:1px solid var(--line);border-radius:12px;padding:14px 18px;background:rgba(10,20,20,.4)}
+.fix .chk{width:26px;height:26px;border-radius:7px;border:2px solid var(--ok);display:flex;align-items:center;justify-content:center;color:var(--ok);font-weight:800;flex:0 0 auto;box-shadow:0 0 14px rgba(46,230,166,.3)}
+.fix .t{font-size:15px}.fix .t b{color:var(--ink)}
+
+/* outro */
+.outro{text-align:center;flex-direction:column}.outro h2{font-size:clamp(28px,5vw,62px)}
+.cta{display:inline-flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-top:18px}
+.btn{font-family:'DejaVu Sans Mono';font-size:13px;letter-spacing:.08em;text-decoration:none;padding:13px 24px;border-radius:999px;border:1px solid var(--line);color:var(--ink);background:rgba(12,20,40,.6);transition:.3s;cursor:pointer}
+.btn.pri{background:linear-gradient(90deg,var(--cy2),var(--blue));border:none;color:#02060f;font-weight:700;box-shadow:0 0 30px rgba(0,176,255,.4)}
+.btn:hover{transform:translateY(-3px)}
+.sig{color:var(--faint);font-family:'DejaVu Sans Mono';font-size:12px;margin-top:28px;letter-spacing:.1em}
+.foot{position:relative;z-index:3;text-align:center;padding:30px;color:var(--faint);font-size:12px;border-top:1px solid var(--line)}
+@media(max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}.cov{grid-template-columns:1fr}.actnum{display:none}}
+@media(prefers-reduced-motion:reduce){.rev{transition:none;opacity:1;transform:none}.dot,.mouse::after{animation:none}}
+</style>
+</head>
+<body class="lock">
+
+<canvas id="scene"></canvas>
+<div class="atmos"><div class="glow"></div><div class="scan"></div><div class="vig"></div></div>
+<div class="prog" id="prog"></div>
+
+<!-- ===== CINEMATIC INTRO ===== -->
+<div id="intro">
+  <div class="veil" id="veil"></div>
+  <div class="ic">
+    <div class="pre" id="ipre">A FIELD RECORD · ANONYMIZED</div>
+    <h1 class="ititle" id="ititle" data-t="INSIDE THE NETWORK">INSIDE THE <span class="cy">NETWORK</span></h1>
+    <div class="isub" id="isub">A complete internal penetration test — reconstructed in full</div>
+  </div>
+  <div class="status" id="status"></div>
+  <div class="intro-hint" id="ihint">scroll / ▶ play</div>
+  <div class="skip" id="skip">SKIP ▸</div>
+</div>
+
+<!-- ===== nav / play ===== -->
+<nav class="nav" id="nav">
+  <a href="#hero"><span>Start</span></a><a href="#a1"><span>Foothold</span></a><a href="#a2"><span>Recon</span></a>
+  <a href="#a3"><span>Findings</span></a><a href="#a4"><span>Coverage</span></a><a href="#a5"><span>Defense</span></a><a href="#out"><span>End</span></a>
+</nav>
+<div class="playbar"><div class="pbtn" id="play">▶ CINEMATIC MODE</div></div>
+
+<div class="wrap">
+  <!-- HERO -->
+  <section class="hero" id="hero">
+    <span class="badge"><span class="dot"></span> AUTHORIZED ENGAGEMENT · COMPLETE INTERNAL ASSESSMENT</span>
+    <h1>INSIDE THE<br><span class="cy">NETWORK</span></h1>
+    <p class="sub">A complete internal penetration test, start to finish — full reconnaissance, deep service
+    enumeration, and device-level analysis across a corporate network. Every finding verified with evidence.</p>
+    <div class="heroline"></div>
+    <div class="scrollcue"><div class="mouse"></div>SCROLL</div>
+  </section>
+
+  <!-- ACT I -->
+  <section id="a1"><div class="actnum">01</div><div class="inner"><div class="panel">
+    <div class="kick rev">Act I — The Foothold</div>
+    <h2 class="big rev d1">No password required.</h2>
+    <p class="lead rev d2">The engagement began where real intrusions often do: <span class="hl">already inside</span>.
+    A single authorized position on the internal LAN. From there, one principle governed every move —
+    <span class="cyt">reaching a host is not the same as being allowed to touch it.</span></p>
+    <p class="lead rev d3" style="margin-top:18px">Visibility is not authorization. That discipline shaped a methodical,
+    full-coverage assessment — not a smash-and-grab.</p>
+  </div></div></section>
+
+  <!-- ACT II -->
+  <section id="a2"><div class="actnum">02</div><div class="inner"><div class="panel">
+    <div class="kick rev">Act II — Full Reconnaissance</div>
+    <h2 class="big rev d1">44 hosts. 9 doors. 2 forgotten machines.</h2>
+    <p class="lead rev d2">The entire subnet was swept and mapped. Nine hosts ran <span class="cyt">SMB</span>; two were
+    <span class="cyt" style="color:var(--me)">networked printers</span> — full computers everyone forgets to defend.
+    Every live host was accounted for.</p>
+    <div class="stats rev d3">
+      <div class="stat"><div class="n" data-count="44">0</div><div class="l">Hosts mapped</div></div>
+      <div class="stat"><div class="n" data-count="9">0</div><div class="l">SMB exposed</div></div>
+      <div class="stat"><div class="n" data-count="2">0</div><div class="l">Printers</div></div>
+      <div class="stat"><div class="n" data-count="5">0</div><div class="l">Findings</div></div>
+    </div>
+  </div></div></section>
+
+  <!-- ACT III -->
+  <section id="a3"><div class="actnum">03</div><div class="inner"><div class="panel">
+    <div class="kick rev">Act III — What Was Exposed</div>
+    <h2 class="big rev d1">Five findings. Every one verified.</h2>
+    <p class="lead rev d2">None required credentials to discover — and each is backed by its own collected evidence.</p>
+    <div class="cards">
+      <div class="fcard rev d1"><span class="bar hi"></span><div class="ic2">🖥️</div><div class="fid">FINDING 01 · VNC</div>
+        <h3>Remote access, no lock</h3><p>A printer exposed a remote-desktop (VNC) service advertising security type <b style="color:#fff">None</b> — zero authentication.</p>
+        <div class="verified">✓ EVIDENCE VERIFIED</div><br><span class="sev hi">High</span></div>
+      <div class="fcard rev d2"><span class="bar hi"></span><div class="ic2">📂</div><div class="fid">FINDING 02 · SMB</div>
+        <h3>Anonymous file access</h3><p>Three hosts allowed anonymous share listing; two let an unauthenticated user <b style="color:#fff">read business documents</b>.</p>
+        <div class="verified">✓ EVIDENCE VERIFIED</div><br><span class="sev hi">High</span></div>
+      <div class="fcard rev d3"><span class="bar hi"></span><div class="ic2">🕰️</div><div class="fid">FINDING 03 · SMBv1</div>
+        <h3>A ghost protocol</h3><p>An obsolete, wormable protocol (<b style="color:#fff">SMBv1</b>) still enabled on a modern workstation.</p>
+        <div class="verified">✓ EVIDENCE VERIFIED</div><br><span class="sev hi">High</span></div>
+      <div class="fcard rev d1"><span class="bar me"></span><div class="ic2">✍️</div><div class="fid">FINDING 04 · SIGNING</div>
+        <h3>Signed, not enforced</h3><p>SMB signing was <b style="color:#fff">enabled but not required</b> — a closed door with no lock.</p>
+        <div class="verified">✓ EVIDENCE VERIFIED</div><br><span class="sev me">Medium</span></div>
+      <div class="fcard rev d2"><span class="bar hi"></span><div class="ic2">🔓</div><div class="fid">FINDING 05 · TLS</div>
+        <h3>Cryptography from 2008</h3><p>A management interface still ran <b style="color:#fff">SSLv3, RC4, 3DES</b> with a certificate expired since 2017.</p>
+        <div class="verified">✓ EVIDENCE VERIFIED</div><br><span class="sev hi">High</span></div>
+      <div class="fcard rev d3" style="display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;background:linear-gradient(145deg,rgba(57,227,255,.08),rgba(12,20,40,.6))">
+        <div class="ic2" style="font-size:34px">🧭</div><h3 style="margin-top:12px">All reachable.<br>All from one foothold.</h3>
+        <p>No credentials. Just trust, left on by default.</p></div>
+    </div>
+  </div></div></section>
+
+  <!-- ACT IV -->
+  <section id="a4"><div class="actnum">04</div><div class="inner"><div class="panel">
+    <div class="kick rev">Act IV — Full-Scope Coverage</div>
+    <h2 class="big rev d1">A complete assessment. <span class="cyt">Nothing skipped.</span></h2>
+    <p class="lead rev d2">A real internal penetration test means covering the whole attack surface and proving every
+    claim. Here is the full methodology that ran end to end — each phase executed, each finding evidenced.</p>
+    <div class="cov">
+      <div class="it rev d1"><span class="chk">✓</span><span class="t">Environment &amp; position mapping</span></div>
+      <div class="it rev d1"><span class="chk">✓</span><span class="t">Full host discovery across the subnet</span></div>
+      <div class="it rev d2"><span class="chk">✓</span><span class="t">Service &amp; version enumeration</span></div>
+      <div class="it rev d2"><span class="chk">✓</span><span class="t">SMB deep-dive on every exposed host</span></div>
+      <div class="it rev d3"><span class="chk">✓</span><span class="t">Anonymous access &amp; permission testing</span></div>
+      <div class="it rev d3"><span class="chk">✓</span><span class="t">Protocol &amp; SMB-signing analysis</span></div>
+      <div class="it rev d4"><span class="chk">✓</span><span class="t">Printer / MFP security assessment</span></div>
+      <div class="it rev d4"><span class="chk">✓</span><span class="t">TLS, cipher &amp; certificate review</span></div>
+      <div class="it rev d5"><span class="chk">✓</span><span class="t">Anonymous RPC probing</span></div>
+      <div class="it rev d5"><span class="chk">✓</span><span class="t">Evidence collection &amp; risk rating</span></div>
+    </div>
+    <div class="covnote">
+      <div class="b rev d3"><div class="n">10</div><div class="l">Phases executed</div></div>
+      <div class="b rev d3"><div class="n">5 / 5</div><div class="l">Findings evidenced</div></div>
+      <div class="b rev d4"><div class="n">0</div><div class="l">Guesses in the report</div></div>
+    </div>
+    <div class="quote rev d4">Evidence, not assumptions.<br>Every finding in the report is one I could <span class="cyt">prove.</span></div>
+  </div></div></section>
+
+  <!-- ACT V -->
+  <section id="a5"><div class="actnum">05</div><div class="inner"><div class="panel">
+    <div class="kick rev">Act V — The Defense</div>
+    <h2 class="big rev d1">Every one of these is fixable.</h2>
+    <p class="lead rev d2">No new budget. No new product. Configuration and hygiene the internal team already owns.</p>
+    <div class="fixes">
+      <div class="fix rev d1"><span class="chk">✓</span><span class="t"><b>Kill anonymous SMB</b> and apply least-privilege on every share.</span></div>
+      <div class="fix rev d1"><span class="chk">✓</span><span class="t"><b>Retire SMBv1</b> — keep SMB2/3 only.</span></div>
+      <div class="fix rev d2"><span class="chk">✓</span><span class="t"><b>Require SMB signing</b> — "enabled" is not "enforced".</span></div>
+      <div class="fix rev d2"><span class="chk">✓</span><span class="t"><b>Lock down printers</b> — authenticate remote access, restrict management, patch firmware.</span></div>
+      <div class="fix rev d3"><span class="chk">✓</span><span class="t"><b>Modernize TLS</b> — drop SSLv3/RC4/3DES, replace the expired certificate.</span></div>
+      <div class="fix rev d3"><span class="chk">✓</span><span class="t"><b>Treat the LAN as hostile</b> — an internal network is not a trusted zone.</span></div>
+    </div>
+  </div></div></section>
+
+  <!-- OUTRO -->
+  <section class="outro" id="out"><div class="inner panel" style="display:flex;flex-direction:column;align-items:center;gap:16px">
+    <div class="kick rev" style="justify-content:center">The Takeaway</div>
+    <h2 class="rev d1">The craft isn't the exploit.<br>It's the <span class="cyt">rigor.</span></h2>
+    <p class="lead rev d2" style="text-align:center">Complete coverage. Careful interpretation. Every claim backed by
+    evidence. That is what a professional internal assessment delivers — and what earns trust.</p>
+    <p class="lead rev d3" style="text-align:center;font-size:17px">When did you last check what an
+    <span class="cyt">unauthenticated user</span> can see on your own network?</p>
+    <div class="cta rev d3"><div class="btn pri" id="replay">↻ Replay the film</div>
+      <a class="btn" href="https://www.linkedin.com" target="_blank" rel="noopener">Connect on LinkedIn</a></div>
+    <div class="sig rev d4">AUTHORED BY YOUSSEF MOHAMED AHMED SALAMA · COMPLETE INTERNAL NETWORK PENETRATION TEST · ALL CLIENT DETAILS ANONYMIZED</div>
+  </div></section>
+
+  <div class="foot">Anonymized educational case study. No client, host, or infrastructure details are disclosed. © 2026</div>
+</div>
+
+<script>
+/* =========================================================
+   3D NETWORK ENGINE (hand-rolled, canvas 2D projection)
+   ========================================================= */
+const cv=document.getElementById('scene'),ctx=cv.getContext('2d');
+let W,H,DPR=Math.min(2,devicePixelRatio||1),CX,CY,FOC;
+function resize(){W=cv.width=Math.floor(innerWidth*DPR);H=cv.height=Math.floor(innerHeight*DPR);
+  cv.style.width=innerWidth+'px';cv.style.height=innerHeight+'px';CX=W/2;CY=H/2;FOC=Math.min(W,H)*1.05;}
+resize();addEventListener('resize',resize);
+
+const N=140, nodes=[];
+for(let i=0;i<N;i++){
+  const u=Math.random(),v=Math.random();
+  const th=u*Math.PI*2, ph=Math.acos(2*v-1), r=(0.45+Math.random()*0.6)*2.5;
+  const home={x:r*Math.sin(ph)*Math.cos(th), y:r*Math.sin(ph)*Math.sin(th)*0.62, z:r*Math.cos(ph)};
+  const scat={x:(Math.random()-0.5)*18, y:(Math.random()-0.5)*18, z:(Math.random()-0.5)*10+9};
+  nodes.push({home,scat,x:scat.x,y:scat.y,z:scat.z,seed:Math.random()*6.28,type:''});
+}
+nodes[0].type='me'; nodes[0].home={x:-2.9,y:0,z:0};
+const smbIdx=[7,15,23,31,47,63,79,95,111]; smbIdx.forEach(i=>nodes[i].type='smb');
+nodes[52].type='prn'; nodes[88].type='prn';
+// links by home proximity
+const links=[];
+for(let i=0;i<N;i++)for(let j=i+1;j<N;j++){
+  const a=nodes[i].home,b=nodes[j].home,d=Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
+  if(d<1.15)links.push([i,j]);
+}
+// spokes from foothold to special nodes
+const spokes=[]; nodes.forEach((n,i)=>{if(n.type==='smb'||n.type==='prn')spokes.push([0,i,n.type]);});
+
+let camRotY=0, camRotX=0.22, camDist=5.4, sceneAlpha=0, scrollK=0;
+function project(p){
+  const cy=Math.cos(camRotY),sy=Math.sin(camRotY);
+  let x1=p.x*cy - p.z*sy, z1=p.x*sy + p.z*cy;
+  const cx=Math.cos(camRotX),sx=Math.sin(camRotX);
+  let y1=p.y*cx - z1*sx, z2=p.y*sx + z1*cx;
+  const zz=z2+camDist; if(zz<0.15)return null;
+  const s=FOC/zz; return {X:CX+x1*s, Y:CY+y1*s, d:zz};
+}
+function colorFor(t){return t==='me'?'255,255,255':t==='smb'?'57,227,255':t==='prn'?'255,176,32':'120,180,255';}
+let packets=[];
+function spawnPackets(){ if(sceneAlpha<0.6)return;
+  spokes.forEach((s,k)=>{ if(Math.random()<0.5) packets.push({a:s[0],b:s[1],t:0,sp:0.012+Math.random()*0.01,c:s[2]}); });
+}
+setInterval(spawnPackets,900);
+
+function render(){
+  ctx.clearRect(0,0,W,H);
+  if(sceneAlpha<=0.001){requestAnimationFrame(render);return;}
+  const P=nodes.map(project);
+  // links
+  ctx.lineWidth=DPR;
+  for(let k=0;k<links.length;k++){
+    const a=P[links[k][0]],b=P[links[k][1]]; if(!a||!b)continue;
+    const dep=(a.d+b.d)/2, al=Math.max(0,(0.22-(dep-3)*0.03))*sceneAlpha; if(al<=0.005)continue;
+    ctx.strokeStyle='rgba(57,227,255,'+al.toFixed(3)+')';
+    ctx.beginPath();ctx.moveTo(a.X,a.Y);ctx.lineTo(b.X,b.Y);ctx.stroke();
+  }
+  // spokes (brighter) from foothold
+  for(const s of spokes){const a=P[s[0]],b=P[s[1]];if(!a||!b)continue;
+    const col=s[2]==='prn'?'255,176,32':'57,227,255';
+    ctx.strokeStyle='rgba('+col+','+(0.16*sceneAlpha).toFixed(3)+')';ctx.lineWidth=DPR;
+    ctx.beginPath();ctx.moveTo(a.X,a.Y);ctx.lineTo(b.X,b.Y);ctx.stroke();}
+  // packets
+  packets=packets.filter(p=>p.t<1);
+  for(const p of packets){p.t+=p.sp;const a=nodes[p.a],b=nodes[p.b];
+    const x=a.x+(b.x-a.x)*p.t,y=a.y+(b.y-a.y)*p.t,z=a.z+(b.z-a.z)*p.t;const pr=project({x,y,z});if(!pr)continue;
+    const r=2.6*DPR*(5.4/pr.d);ctx.fillStyle='rgba(190,252,255,'+sceneAlpha+')';ctx.shadowColor='rgba(57,227,255,.9)';ctx.shadowBlur=10*DPR;
+    ctx.beginPath();ctx.arc(pr.X,pr.Y,Math.max(1,r),0,6.28);ctx.fill();ctx.shadowBlur=0;}
+  // nodes, far to near
+  const order=[...nodes.keys()].filter(i=>P[i]).sort((p,q)=>P[q].d-P[p].d);
+  for(const i of order){const a=P[i],n=nodes[i];
+    const depth=Math.max(.15,Math.min(1,(8-a.d)/6));
+    const base=n.type==='me'?4.4:n.type==='prn'?3.6:n.type==='smb'?3.1:1.7;
+    const r=Math.max(.6, base*DPR*(5.4/a.d)*0.55);
+    const col=colorFor(n.type), al=(n.type?0.95:0.5*depth)*sceneAlpha;
+    if(n.type){ctx.shadowColor='rgba('+col+',.9)';ctx.shadowBlur=(n.type==='me'?22:13)*DPR;}
+    // subtle twinkle
+    const tw=n.type?1:(0.7+0.3*Math.sin(perfT*0.002+n.seed));
+    ctx.fillStyle='rgba('+col+','+(al*tw).toFixed(3)+')';
+    ctx.beginPath();ctx.arc(a.X,a.Y,r,0,6.28);ctx.fill();ctx.shadowBlur=0;
+    if(n.type==='me'){ // pulsing ring
+      const pr=(1+Math.sin(perfT*0.004))*0.5; ctx.strokeStyle='rgba(57,227,255,'+(0.5*sceneAlpha*(1-pr)).toFixed(3)+')';
+      ctx.lineWidth=1.3*DPR;ctx.beginPath();ctx.arc(a.X,a.Y,r+pr*26*DPR,0,6.28);ctx.stroke();}
+  }
+  requestAnimationFrame(render);
+}
+let perfT=0; requestAnimationFrame(function tick(t){perfT=t;requestAnimationFrame(tick);});
+
+/* animate camera continuously */
+(function cam(){camRotY+=0.0016; camRotX=0.22+Math.sin(perfT*0.00015)*0.05 + scrollK*0.25;
+  camDist=5.4 - scrollK*0.5; requestAnimationFrame(cam);})();
+render();
+
+/* =========================================================
+   CINEMATIC INTRO TIMELINE
+   ========================================================= */
+const intro=document.getElementById('intro'),veil=document.getElementById('veil');
+let introStart=null, introDone=false, raf;
+const statusLines=[
+  ['▸ initializing secure session','dim'],
+  ['▸ operator: ','',''+'YOUSSEF SALAMA','ok'],
+  ['▸ engagement: INTERNAL NETWORK PENETRATION TEST','ok'],
+  ['▸ rendering network topology ... ','',''+'100%','ok'],
+  ['▸ 44 nodes · 9 SMB · 2 MFP mapped','dim'],
+  ['▸ status: ','',''+'ENGAGEMENT LIVE','warn'],
+];
+const statusEl=document.getElementById('status');
+let sLine=0,sChar=0,sHtml=[];
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+function typeStatus(){
+  if(introDone)return;
+  if(sLine>=statusLines.length){statusEl.innerHTML=sHtml.join('\n');return;}
+  const L=statusLines[sLine];
+  // support [text,cls] or [t,cls,word,wcls]
+  const full = L.length>2 ? L[0]+L[2] : L[0];
+  if(sChar<=full.length){
+    let shown=full.slice(0,sChar);
+    let rendered;
+    if(L.length>2 && sChar>L[0].length){rendered='<span class="'+(L[1]||'')+'">'+esc(L[0])+'</span><span class="'+L[3]+'">'+esc(shown.slice(L[0].length))+'</span>';}
+    else rendered='<span class="'+(L[1]||'')+'">'+esc(shown)+'</span>';
+    statusEl.innerHTML=sHtml.join('\n')+(sHtml.length?'\n':'')+rendered;
+    sChar++; setTimeout(typeStatus,10+Math.random()*22);
+  } else {
+    if(L.length>2)sHtml.push('<span class="'+(L[1]||'')+'">'+esc(L[0])+'</span><span class="'+L[3]+'">'+esc(L[2])+'</span>');
+    else sHtml.push('<span class="'+(L[1]||'')+'">'+esc(L[0])+'</span>');
+    sLine++;sChar=0;setTimeout(typeStatus,120);
+  }
+}
+function introLoop(ts){
+  if(introStart===null)introStart=ts;
+  const e=(ts-introStart)/1000; // seconds
+  // particle assembly 0..3.2s
+  const k=Math.min(1,e/3.2), ease=1-Math.pow(1-k,3);
+  for(const n of nodes){n.x=n.scat.x+(n.home.x-n.scat.x)*ease;n.y=n.scat.y+(n.home.y-n.scat.y)*ease;n.z=n.scat.z+(n.home.z-n.scat.z)*ease;}
+  sceneAlpha=Math.min(1,e/1.8);
+  camDist=9 - 3.6*ease;
+  if(e>0.3) document.getElementById('ipre').classList.add('show');
+  if(e>2.5){const t=document.getElementById('ititle');if(!t.classList.contains('show')){t.classList.add('show','glitch');setTimeout(()=>t.classList.remove('glitch'),600);}}
+  if(e>3.1) document.getElementById('isub').classList.add('show');
+  if(e>3.6) document.getElementById('ihint').classList.add('show');
+  if(e<4.6 && !introDone) raf=requestAnimationFrame(introLoop);
+  else finishIntro();
+}
+function finishIntro(){
+  if(introDone)return; introDone=true;
+  // snap nodes home
+  for(const n of nodes){n.x=n.home.x;n.y=n.home.y;n.z=n.home.z;} sceneAlpha=1; camDist=5.4;
+  intro.classList.add('done');
+  document.documentElement.classList.remove('lock');document.body.classList.remove('lock');
+  startContent();
+}
+document.getElementById('skip').onclick=()=>{cancelAnimationFrame(raf);finishIntro();};
+// kick off
+setTimeout(typeStatus,500);
+requestAnimationFrame(introLoop);
+// safety
+setTimeout(()=>{if(!introDone)finishIntro();},8000);
+
+/* =========================================================
+   CONTENT: reveals / countup / nav / scroll camera
+   ========================================================= */
+let contentStarted=false;
+function startContent(){ if(contentStarted)return; contentStarted=true;
+  document.querySelectorAll('.rev').forEach(el=>io.observe(el));
+  document.querySelectorAll('[data-count]').forEach(el=>cio.observe(el));
+}
+const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('in')}),{threshold:.16});
+const cio=new IntersectionObserver(es=>es.forEach(e=>{if(!e.isIntersecting)return;const el=e.target,t=+el.dataset.count;let n=0;
+  const st=Math.max(1,Math.round(t/26));const iv=setInterval(()=>{n+=st;if(n>=t){n=t;clearInterval(iv)}el.textContent=n},26);cio.unobserve(el)}),{threshold:.6});
+
+const prog=document.getElementById('prog');
+const navlinks=[...document.querySelectorAll('.nav a')];
+const secs=navlinks.map(a=>document.querySelector(a.getAttribute('href')));
+addEventListener('scroll',()=>{const h=document.documentElement;const mx=h.scrollHeight-h.clientHeight;
+  const sp=mx>0?h.scrollTop/mx:0; prog.style.width=(sp*100)+'%'; scrollK=sp;
+  let idx=0;secs.forEach((s,i)=>{if(s&&s.getBoundingClientRect().top<innerHeight*.5)idx=i});
+  navlinks.forEach((a,i)=>a.classList.toggle('active',i===idx));},{passive:true});
+
+/* controls */
+document.getElementById('replay').onclick=()=>scrollTo({top:0,behavior:'smooth'});
+let auto=null;const playBtn=document.getElementById('play');
+function stopAuto(){if(auto){clearInterval(auto);auto=null;playBtn.classList.remove('on');playBtn.textContent='▶ CINEMATIC MODE';}}
+playBtn.onclick=()=>{ if(auto){stopAuto();return;}
+  playBtn.classList.add('on');playBtn.textContent='❚❚ PLAYING';
+  auto=setInterval(()=>{const h=document.documentElement;
+    if(h.scrollTop+h.clientHeight>=h.scrollHeight-4){stopAuto();return;} scrollBy({top:2,left:0});},16);};
+addEventListener('wheel',()=>stopAuto(),{passive:true});
+</script>
+</body>
+</html>
